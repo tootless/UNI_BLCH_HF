@@ -19,23 +19,51 @@ constexpr std::array<uint32_t, state_wcount> state_words = { //phi / (prime star
 };
 constexpr size_t block_size = 32; //iteration input size
 constexpr uint32_t value = 2654435769u; // 2^32/phi, rounded to uneven number cause thats better
+constexpr uint32_t mix_constant = 0x85ebca6bu;
+constexpr uint32_t round_constant = 0x9e3779b9u;
 
 inline uint32_t rotate(uint32_t state, unsigned value) {
 	return (state << value) | (state >> (32u - value));
 }
 
-//32 byte block into state with two words so there is more interaction
-inline void mix_block(std::array<uint32_t, state_wcount>& state, const std::vector<uint8_t>& block) {
-	size_t i = 0;
-	for (unsigned char c : block) {
-		size_t firstw = i % state_wcount;
-		size_t secondw = (i + 3) % state_wcount;
-		state[firstw] += c;
-		state[firstw] *= value;
-		state[firstw] = rotate(state[firstw], 15);
+// Mix all eight state words together.
+inline void mix_round(std::array<uint32_t, state_wcount>& state,
+	unsigned round) {
+	auto old = state;
 
-		state[secondw] ^= state[firstw];
-		++i;
+	for (size_t i = 0; i < state_wcount; ++i) {
+		uint32_t a = old[i];
+		uint32_t b = old[(i + 1) % state_wcount];
+		uint32_t c = old[(i + 4) % state_wcount];
+
+		uint32_t x = a + rotate(b ^ round_constant, 7);
+		x ^= c + round_constant * (round + 1u);
+		x *= mix_constant;
+		state[i] = rotate(x, static_cast<unsigned>(5 + i * 3));
+	}
+}
+
+// Process one block without allocating another vector.
+inline void mix_block(std::array<uint32_t, state_wcount>& state,
+	const uint8_t* block, size_t length) {
+	for (size_t i = 0; i < length; ++i) {
+		size_t lane = i % state_wcount;
+		size_t other = (lane + 3) % state_wcount;
+		size_t next = (lane + 1) % state_wcount;
+
+		state[lane] ^= static_cast<uint32_t>(block[i])
+			+ value
+			+ static_cast<uint32_t>(i) * round_constant;
+
+		state[lane] *= mix_constant;
+		state[lane] = rotate(state[lane], 13);
+
+		state[other] += state[lane] ^ rotate(state[next], 7);
+	}
+
+	// Spread the changes from this block across the whole state.
+	for (unsigned r = 0; r < 4; ++r) {
+		mix_round(state, r);
 	}
 }
 
@@ -58,16 +86,25 @@ inline std::vector <uint8_t> pad(const std::vector<uint8_t>& data) {
 	return padded;
 }
 
-//hashed result function for bytes
-inline std::array<uint32_t, state_wcount> hash_block(const std::vector<uint8_t>& data) {
+// Finalization: mix the complete state several more times.
+inline void finalize_hash(std::array<uint32_t, state_wcount>& state) {
+	for (unsigned r = 0; r < 8; ++r) {
+		mix_round(state, r + 4);
+	}
+}
+
+// Hash arbitrary binary data.
+inline std::array<uint32_t, state_wcount>
+hash_block(const std::vector<uint8_t>& data) {
 	std::array<uint32_t, state_wcount> state = state_words;
 	std::vector<uint8_t> padded = pad(data);
 
-	for (size_t offset = 0; offset < padded.size(); offset += block_size) {
-		std::vector<uint8_t> block(padded.begin() + offset, padded.begin() + offset + block_size);
-		mix_block(state, block);
+	for (size_t offset = 0; offset < padded.size();
+		offset += block_size) {
+		mix_block(state, padded.data() + offset, block_size);
 	}
 
+	finalize_hash(state);
 	return state;
 }
 
@@ -89,10 +126,25 @@ inline std::vector<uint8_t> pad(const std::string& data) {
 	return pad(std::vector<uint8_t>(data.begin(), data.end()));
 }
 
-//with salt - only string
-inline std::array<uint32_t, state_wcount> hash_block_salted(const std::string& data, const std::string& salt) {
-	return hash_block(data + salt);
+inline std::array<uint32_t, state_wcount>
+hash_block_salted(const std::string& data, const std::string& salt) {
+	std::string combined;
+	combined.reserve(8 + data.size() + salt.size());
+
+	uint64_t len = static_cast<uint64_t>(data.size());
+
+	for (unsigned i = 0; i < 8; ++i) {
+		combined.push_back(
+			static_cast<char>((len >> (8 * i)) & 0xFFu)
+		);
+	}
+
+	combined += data;
+	combined += salt;
+
+	return hash_block(combined);
 }
+
 
 inline std::string salt(size_t num_bytes) {
 	std::random_device rd;
