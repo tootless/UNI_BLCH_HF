@@ -91,8 +91,7 @@ inline std::vector<uint8_t> pad(const std::string& data) {
 
 //with salt - only string
 inline std::array<uint32_t, state_wcount> hash_block_salted(const std::string& data, const std::string& salt) {
-	std::string salted_data = salt + data;
-	return hash_block(salted_data);
+	return hash_block(data + salt);
 }
 
 inline std::string salt(size_t num_bytes) {

@@ -11,6 +11,6 @@ add_executable(hash_f main.cpp)
 add_executable(experiments experiments/main.cpp 
 	experiments/1/experiment1.cpp 
 	experiments/2/experiment2.cpp 
-	experiments/3/experiment3.cpp "experiments/4/experiment4.cpp" "experiments/5/experiment5.cpp" "experiments/6/experiment6.cpp")
+	experiments/3/experiment3.cpp "experiments/4/experiment4.cpp" "experiments/5/experiment5.cpp" "experiments/6/experiment6.cpp" "experiments/7/experiment7.cpp")
 
 target_include_directories(experiments PRIVATE ${CMAKE_SOURCE_DIR})
