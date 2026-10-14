@@ -3,8 +3,8 @@
 #include "3/experiment3.hpp"
 #include "4/experiment4.hpp"
 #include "5/experiment5.hpp"
-//#include "6/experiment5.hpp"
-//#include "7/experiment5.hpp"
+#include "6/experiment6.hpp"
+//#include "7/experiment7.hpp"
 #include <iostream>
 #include <string>
 
@@ -50,9 +50,9 @@ int main() {
 	case(5):
 		run_experiment5();
 		break;
-	//case(6):
-	//	run_experiment6();
-	//	break;
+	case(6):
+		run_experiment6();
+		break;
 	//case(7):
 	//	run_experiment7();
 	//	break;
